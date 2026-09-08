@@ -15,18 +15,57 @@
   if (night) document.body.classList.add('night');
   applyFs();
 
-  // ---- 桥 ----
+  // ---- 桥：优先原生 JSBridge；纯浏览器预览时降级为本地 mock ----
   var cbSeq = 0;
   var pending = {};
   window.__nativeCallback = function (id, res) {
     var fn = pending[id];
     if (fn) { delete pending[id]; fn(res); }
   };
+  // 浏览器降级后端：fetch + localStorage 模拟，便于桌面端直接预览 UI
+  var browserBridge = (function () {
+    var SEED = ['daodejing.txt', 'lunyu.txt', 'zhuangzi.txt'];
+    function ok(o){ o = o || {}; o.ok = true; return o; }
+    function fail(r){ return { ok:false, reason:r }; }
+    function stripExt(n){ var i=n.lastIndexOf('.'); return i>0?n.slice(0,i):n; }
+    function loadP(id){ var v=parseFloat(localStorage.getItem('p_'+id)); return isNaN(v)?0:v; }
+    function saveP(id,p){ localStorage.setItem('p_'+id, String(p)); }
+    function listBooks(){
+      return Promise.all(SEED.map(function(name){
+        var head = fetch('seed/'+name,{method:'HEAD'}).then(function(r){
+          return parseInt(r.headers.get('content-length')||'0',10);
+        }).catch(function(){ return 0; });
+        return head.then(function(sz){
+          return { id:name, title:stripExt(name), url:'seed/'+encodeURIComponent(name), size:sz, pct:loadP(name) };
+        });
+      }));
+    }
+    return {
+      invoke: function(method, paramsJson, cbId){
+        var p = {}; try { p = JSON.parse(paramsJson)||{}; } catch(e){}
+        if (method === 'books.list') {
+          listBooks().then(function(books){ __nativeCallback(cbId, ok({books:books})); });
+        } else if (method === 'books.import') {
+          __nativeCallback(cbId, fail('no_picker'));
+        } else if (method === 'books.delete') {
+          __nativeCallback(cbId, ok());
+        } else if (method === 'progress.save') {
+          saveP(p.id, p.pct||0); __nativeCallback(cbId, ok());
+        } else if (method === 'progress.load') {
+          __nativeCallback(cbId, ok({pct:loadP(p.id)}));
+        } else {
+          __nativeCallback(cbId, fail('unknown_method'));
+        }
+      }
+    };
+  })();
+  function bookUrl(id){ return (window.NativeBridge ? '/books/' : 'seed/') + encodeURIComponent(id); }
+  var bridge = window.NativeBridge || browserBridge;
   function invoke(method, params) {
     return new Promise(function (resolve) {
       var id = 'cb' + (++cbSeq);
       pending[id] = resolve;
-      window.NativeBridge.invoke(method, JSON.stringify(params || {}), id);
+      bridge.invoke(method, JSON.stringify(params || {}), id);
     });
   }
 
@@ -182,7 +221,7 @@
         if (meta) titleEl.textContent = meta.title;
       });
       // 正文：直接 fetch 虚拟域名路径，内容永远 UTF-8
-      fetch('/books/' + encodeURIComponent(id))
+      fetch(bookUrl(id))
         .then(function (r) { return r.text(); })
         .then(function (text) {
           render(text);
