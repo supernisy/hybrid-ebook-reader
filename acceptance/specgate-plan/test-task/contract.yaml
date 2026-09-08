@@ -1,0 +1,175 @@
+# specgate 验收契约：本地电子书阅读器（Hybrid MVP）
+# 生成自 reader/REQUIREMENT.md；本契约是「需求 → 验收」基线，改动 acceptance/ 触发的门禁据此把关。
+
+contract: ebook-reader-mvp
+
+intent: |
+  做一个零权限、全程离线的 Android 本地电子书阅读器（Hybrid MVP）：原生层是薄壳，
+  用 WebView 承载全部 UI（HTML/CSS/JS），通过 JSBridge 让 Web 层调用原生能力。
+  书架列出 App 专属目录的 txt；CSS 多列分页 + scrollLeft 翻页；字号 3 档、夜间模式；
+  阅读进度按百分比持久化；SAF 导入 txt 并做 UTF-8/GBK 编码探测后统一落盘 UTF-8；
+  首启自动播种 3 本公版书；APK 体积 < 1MB；不依赖任何真实 HTTP 服务器。
+
+accept:
+  # ---------- 约束层 ----------
+  - id: C0-ZERO-PERM
+    given: 打包产物 reader 安装包
+    when: 检查其 AndroidManifest.xml
+    then: 不含任何 uses-permission 声明
+    verify: unit
+  - id: C0-SIZE
+    given: 打包产物 APK 文件
+    when: 测量其字节体积
+    then: 体积小于 1MB
+    verify: unit
+    invariants:
+      - assets/web/seed 下新增一本公版书后，APK 体积不减少
+  - id: C0-OFFLINE
+    given: 网络完全禁用的真机环境
+    when: 启动阅读器并打开任一本地书
+    then: 正文可正常显示且不出现「网络不可用」类错误
+    verify: manual
+
+  # ---------- 首启播种 ----------
+  - id: F2-SEED-DIR
+    given: 全新安装且无书籍目录的应用
+    when: 首次启动进入书架
+    then: 在 App 专属目录 getExternalFilesDir(null)/books/ 下创建 3 个文件 且文件名等于「daodejing.txt」「lunyu.txt」「zhuangzi.txt」
+    verify: unit
+  - id: F2-SEED-LIST
+    given: 已完成首启播种的阅读器
+    when: 打开书架
+    then: 书架列表包含 3 个条目 且标题等于「daodejing」「lunyu」「zhuangzi」
+    verify: unit
+    invariants:
+      - 删除其中 1 本后再打开书架，列表条目数从 3 减少为 2
+  - id: F2-SEED-UTF8
+    given: 已落盘的种子书 daodejing.txt
+    when: 以 UTF-8 解码其字节内容
+    then: 解码不失败且内容首字符不是 BOM 码点 U+FEFF
+    verify: unit
+
+  # ---------- 书架 ----------
+  - id: F1-SHELF-EMPTY
+    given: App 专属书籍目录为空的阅读器
+    when: 打开书架
+    then: 页面显示空状态文案且文案包含「导入」二字
+    verify: unit-visual
+  - id: F1-CARD-PROGRESS
+    given: 某本书已读到 40% 的书架
+    when: 观察该书卡片
+    then: 卡片文字包含「已读 40%」
+    verify: unit-visual
+  - id: F1-DELETE
+    given: 书架上存在某本书
+    when: 确认删除该书
+    then: 该书从书架列表移除且对应磁盘文件被删除
+    verify: unit
+    invariants:
+      - 删除前有 N 本书，删除后列表数量等于 N-1
+
+  # ---------- 阅读 / 分页 ----------
+  - id: F3-MULTICOL
+    given: 已打开正文长度超过一屏的 daodejing.txt
+    when: 正文渲染完成
+    then: 阅读容器横向溢出值 scrollWidth - clientWidth 大于 0
+    verify: unit-visual
+    invariants:
+      - 字号档位从最小调到最大后，总页数不减少
+  - id: F3-PAGECOUNT
+    given: 已打开 daodejing.txt 且多列分页生效
+    when: 读取底部页码指示器
+    then: 页码文本匹配「1 / N」格式 且 N 大于等于 2
+    verify: unit-visual
+    invariants:
+      - 字号档位变化后，页码格式仍是「cur / N」且 N 与当前列数一致
+  - id: F3-CLICK
+    given: 处于第 1 页的阅读页
+    when: 点击视口右半屏
+    then: 页码指示从「1 / N」变为「2 / N」 且 scrollLeft 严格增大
+    verify: unit-visual
+  - id: F3-SWIPE
+    given: 处于第 1 页的阅读页
+    when: 在视口上自右向左滑动超过 40px
+    then: 页码指示前进 1 页 且不触发重复翻页（一次滑动只跳 1 页）
+    verify: unit-visual
+    invariants:
+      - 连续向左滑动 k 次后，页码前进总数等于 k
+
+  # ---------- 字号 / 夜间 ----------
+  - id: F4-FONTSIZE
+    given: 处于阅读页第 1 页
+    when: 连续点击字号按钮 3 次
+    then: 字体样式 font-size 在 3 个取值之间循环 且每次切换后当前百分比进度保持在同一区间
+    verify: unit-visual
+    invariants:
+      - 再次点击 3 次后，font-size 与最初取值完全相等
+      - 连续点击 6 次后，font-size 仍等于最初取值（3 档循环不漂移）
+  - id: F4-NIGHT
+    given: 处于日间模式的阅读页
+    when: 点击夜间按钮
+    then: body 根节点出现 night 类 且背景颜色发生变化
+    verify: unit-visual
+    invariants:
+      - 再次点击后，body 根节点的 night 类状态与点击前相等（回到日间）
+      - 连续点击 4 次后，body 根节点是否含 night 类与仅点击 2 次时完全一致（开关幂等）
+
+  # ---------- 进度 ----------
+  - id: F5-PROGRESS-SAVE
+    given: 已读到第 3 页的阅读页
+    when: 触发进度保存（翻页节流或离开页面）
+    then: 持久化存储中的 pct 字段等于 当前scrollLeft/(scrollWidth-step) 的百分比 且不等于 0
+    verify: unit
+    invariants:
+      - 相同 scrollLeft 位置连续触发两次保存后，两次保存的 pct 完全相等
+      - 阅读进度增加后再保存，保存的 pct 不小于增加前保存的 pct
+  - id: F5-PROGRESS-RESTORE
+    given: 上次读到 50% 且已关闭的书
+    when: 重新打开该书
+    then: 进入时 scrollLeft 定位到对应百分比页 且页码文本匹配 50% 附近的页
+    verify: unit-visual
+    invariants:
+      - 上次进度 pct 从 0 增加到 100 后重新打开，起始页严格靠后（不早于原位置）
+
+  # ---------- 导入 ----------
+  - id: F6-IMPORT-UTF8
+    given: 一台已授权 SAF 的阅读器
+    when: 导入一份 UTF-8 无 BOM 的 txt
+    then: 该书出现在书架 且正文中文字符不出现乱码替换符 U+FFFD
+    verify: manual
+  - id: F6-IMPORT-GBK
+    given: 一台已授权 SAF 的阅读器
+    when: 导入一份 GB18030 编码的 txt
+    then: 该书出现在书架 且正文中文正确显示不出现乱码替换符 U+FFFD
+    verify: manual
+    invariants:
+      - 同一份文字分别以 GB18030 与 UTF-8 两种编码导入后，两个落盘文件的 UTF-8 解码结果完全一致
+      - 再次导入同一份 GB18030 文件后，落盘文件 UTF-8 解码内容与首次导入相等
+  - id: F6-IMPORT-DEDUPE
+    given: 书架上已存在 daodejing.txt
+    when: 再次导入同名 daodejing.txt
+    then: 书架列表不出现第二个相同标题条目（去重）
+    verify: unit
+    invariants:
+      - 重复导入同名文件任意次，书架条目数不增加
+
+uses:
+  components: [index.html, reader.html, MainActivity.java, build_apk.sh]
+
+breaks:
+  - what: 工具默认的 verify 采集路线（verify-suite 面向浏览器 DOM）并不覆盖 Android 原生 WebView + JSBridge + SAF 的离线场景
+    why: 本应用是离线 APK，无远程接口，多数验收需在真机/打包产物上以脚本断言完成；unit/manual 更贴合而非伪造接口状态矩阵
+    approved: true
+
+out_of_scope:
+  - 云端书库 / 在线书城 / 任何联网能力
+  - PDF、EPUB 等非 txt 格式
+  - 翻页动画特效、高亮、书签、搜索、目录
+  - iOS / 桌面 / 其它平台版本
+  - 多用户、账号、云同步
+  - 阅读统计、非固定 3 档的自定义字体
+  - 跨机型 / 跨 API Level 的兼容性矩阵
+
+states:
+  - empty
+  - error
