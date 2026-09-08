@@ -46,17 +46,16 @@ javac -d "$STAGE/classes" -classpath "$ANDROID_JAR" "$SRC_DIR/MainActivity.java"
 echo "==> 3. d8 -> classes.dex"
 rm -rf "$STAGE/dexout"; mkdir -p "$STAGE/dexout"
 "$D8" --release --output "$STAGE/dexout" $(find "$STAGE/classes" -name '*.class')
-DEX="$STAGE/dexout/classes.dex"
+DEX="$(pwd)/$STAGE/dexout/classes.dex"
+echo "  dexout contents:"; ls -la "$STAGE/dexout" || true
 [ -f "$DEX" ] || { echo "DEX NOT FOUND at $DEX"; exit 1; }
 
 echo "==> 4. assemble apk (base + classes.dex + assets)"
 cp "$STAGE/base.apk" "$STAGE/unsigned.apk"
-( cd "$STAGE" \
-  && rm -rf pack && mkdir -p pack \
-  && cp "$DEX" pack/ \
-  && cp -r ../assets pack/assets \
-  && cd pack \
-  && zip -q -r ../unsigned.apk classes.dex assets )
+rm -rf "$STAGE/pack"; mkdir -p "$STAGE/pack"
+cp "$DEX" "$STAGE/pack/"
+cp -r "$(pwd)/assets" "$STAGE/pack/assets"
+( cd "$STAGE/pack" && zip -q -r ../unsigned.apk classes.dex assets )
 
 echo "==> 5. zipalign"
 "$ZIPALIGN" -p 4 "$STAGE/unsigned.apk" "$STAGE/aligned.apk"
