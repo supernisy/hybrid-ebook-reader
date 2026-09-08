@@ -1,0 +1,62 @@
+# 通用验收门禁模板（acceptance-gate skill 附带）
+# 用法：复制到目标仓库 .github/workflows/specgate-gate.yml 即生效。
+# 作用：改动 acceptance/ 下契约的 PR/push 会自动过 specgate lint，
+#       契约不合格 → 检查失败 → PR 不允许合并。
+name: specgate 验收契约门禁
+
+on:
+  pull_request:
+    paths:
+      - 'acceptance/**'
+      - '.github/workflows/specgate-gate.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'acceptance/**'
+
+permissions:
+  contents: read
+
+jobs:
+  specgate-lint:
+    name: specgate lint 验收契约
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout target repo
+        uses: actions/checkout@v4
+        with:
+          path: repo
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Clone specgate（契约门禁工具）
+        run: git clone --depth 1 https://github.com/supernisy/specgate.git "$RUNNER_TEMP/specgate"
+
+      - name: Install specgate deps
+        run: npm install --omit=dev --prefix "$RUNNER_TEMP/specgate"
+
+      - name: Run specgate lint gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          FAIL=0
+          shopt -s nullglob
+          for f in repo/acceptance/*.yaml; do
+            base=$(basename "$f")
+            # 跳过：故意写坏的演示样本（-bad）、未定稿草稿（.draft）
+            case "$base" in
+              *-bad.yaml|*.draft.yaml)
+                echo "⏭️  跳过（非门禁目标）: $base"
+                continue ;;
+            esac
+            echo "== specgate lint: $base =="
+            node "$RUNNER_TEMP/specgate/src/cli.js" lint "$f" || FAIL=1
+          done
+          if [ "$FAIL" -ne 0 ]; then
+            echo "❌ 存在未通过 specgate 门禁的验收契约，请先修正再合并。"
+            exit 1
+          fi
+          echo "✅ 所有验收契约通过 specgate 门禁。"
