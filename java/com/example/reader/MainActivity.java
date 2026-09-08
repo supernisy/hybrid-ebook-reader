@@ -218,7 +218,7 @@ public class MainActivity extends Activity {
                                         Intent.createChooser(i, "选择一个 .txt 文件"), REQ_IMPORT);
                             } catch (Exception e) {
                                 Log.e(TAG, "no file picker", e);
-                                reply(pendingImportCb, fail("no_picker"));
+                                reply(pendingImportCb, fail("no_picker").toString());
                                 pendingImportCb = null;
                             }
                         }
