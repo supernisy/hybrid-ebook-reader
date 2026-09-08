@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>阅读</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="reader">
+    <div class="reader-head">
+      <button class="back" id="backBtn">‹</button>
+      <div class="rtitle" id="rtitle">—</div>
+      <div class="tools">
+        <button id="fsBtn">字</button>
+        <button id="nightBtn">☾</button>
+      </div>
+    </div>
+    <div id="viewport">
+      <div id="book"></div>
+      <div class="loading" id="loading">加载中…</div>
+    </div>
+    <div class="reader-foot"><span id="page">0 / 0</span></div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>

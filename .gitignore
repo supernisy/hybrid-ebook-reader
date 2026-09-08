@@ -1,0 +1,7 @@
+# 构建中间产物与本地工具链（不上传）
+tools/
+build/
+.gradle/
+*.zip
+*.keystore
+*.apk
