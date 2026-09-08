@@ -211,6 +211,26 @@
       else gotoPage(curPage() + 1);
     });
 
+    // 左右滑动翻页（手机上人本能是滑，不是点）。
+    // 因 swipe 必有位移，不会触发 click，与上面 click 互补不双翻。
+    var touchStart = null;
+    viewport.addEventListener('touchstart', function (e) {
+      if (e.touches.length !== 1) { touchStart = null; return; }
+      var t = e.touches[0];
+      touchStart = { x: t.clientX, y: t.clientY };
+    }, { passive: true });
+    viewport.addEventListener('touchend', function (e) {
+      if (!touchStart) return;
+      var t = e.changedTouches[0];
+      var dx = t.clientX - touchStart.x;
+      var dy = t.clientY - touchStart.y;
+      touchStart = null;
+      if (Math.abs(dx) > 40 && Math.abs(dy) < 50) {
+        // 左滑下一页，右滑上一页
+        gotoPage(curPage() + (dx < 0 ? 1 : -1));
+      }
+    }, { passive: true });
+
     load();
 
     function load() {

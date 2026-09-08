@@ -81,7 +81,13 @@ html, body {
   border-radius: 8px; padding: 4px 10px; font-size: 14px; cursor: pointer;
 }
 
-#viewport { width: 100%; flex: 1; position: relative; touch-action: pan-y; }
+#viewport {
+  width: 100%;
+  flex: 1;
+  min-height: 0;            /* 关键：禁止 flex 子项被内容撑开（陷阱：否则 #book 高度链断裂，多列不横铺） */
+  position: relative;
+  touch-action: pan-y;
+}
 #book {
   height: 100%;
   padding: 18px 18px 24px;
